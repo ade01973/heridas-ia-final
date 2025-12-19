@@ -74,9 +74,7 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        // MANTENEMOS TU MODELO GANADOR: 2.5-flash
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
           SYSTEM_PROMPT,
@@ -113,19 +111,18 @@ export async function POST(request: Request) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         
-        // --- AQUÍ ESTÁ EL ORDEN CORREGIDO SEGÚN TU FILA DE PRUEBA ---
         const row = [
-          new Date().toLocaleString(),          // Col A: Fecha (ANTES era ID)
-          identificationCode,                   // Col B: ID (ANTES era Fecha)
+          new Date().toLocaleString(),          // Col A: Fecha
+          identificationCode,                   // Col B: ID
           result.etiologia_probable,            // Col C
           result.tejido_predominante,           // Col D
           result.nivel_exudado,                 // Col E
-          result.signos_infeccion,              // Col F (Infección va antes que Piel en tu prueba)
+          result.signos_infeccion,              // Col F
           result.piel_perilesional,             // Col G
-          result.objetivo_aposito,              // Col H (Objetivo va antes que Apósito)
+          result.objetivo_aposito,              // Col H
           result.aposito_primario,              // Col I
-          "Profesional sanitario (IA)",         // Col J: Fuente (Coincide con tu "Profesional...")
-          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K: Modelo (Al final)
+          "Inteligencia Artificial",            // Col J: Fuente (CORREGIDO)
+          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K: Modelo
           "Prompt v1.0"                         // Col L: Versión
         ];
 
