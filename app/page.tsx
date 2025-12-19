@@ -1,11 +1,12 @@
 'use client';
 import { useState } from 'react';
-import { Upload, FileText, Activity } from 'lucide-react';
+import { Upload, FileText, Activity, AlertCircle } from 'lucide-react';
 
 export default function Home() {
   const [file, setFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null); // Nuevo estado para errores
   const [model, setModel] = useState('chatgpt');
   const [idCode, setIdCode] = useState('');
 
@@ -15,21 +16,34 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = () => setFile(reader.result as string);
       reader.readAsDataURL(f);
+      setResult(null); // Limpiar resultado anterior
+      setError(null);  // Limpiar error anterior
     }
   };
 
   const analyze = async () => {
     if (!file) return alert('Sube una imagen primero');
     setLoading(true);
+    setError(null);
+    setResult(null);
+
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         body: JSON.stringify({ image: file, modelId: model, identificationCode: idCode }),
       });
+      
       const data = await res.json();
+
+      if (!res.ok) {
+        // Si el servidor devuelve error, lo capturamos aquí
+        throw new Error(data.error || 'Error desconocido en el servidor');
+      }
+
       setResult(data);
-    } catch (error) {
-      alert('Error al analizar');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Error de conexión');
     }
     setLoading(false);
   };
@@ -90,23 +104,33 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Mensaje de Error (Si ocurre) */}
+        {error && (
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-red-700 flex items-center gap-2 mb-6">
+            <AlertCircle className="w-5 h-5" />
+            <p><strong>Fallo:</strong> {error}</p>
+          </div>
+        )}
+
         {/* Resultados */}
         {result && (
           <div className="bg-slate-50 p-6 rounded-lg border">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <FileText /> Resultados
             </h2>
-            <div className={`text-sm mb-4 p-2 rounded ${result.sheetStatus.includes('OK') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-              Estado Google Sheet: {result.sheetStatus}
+            
+            {/* Protección: Solo muestra el estado del Sheet si existe */}
+            <div className={`text-sm mb-4 p-2 rounded ${result.sheetStatus?.includes('OK') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              Estado Google Sheet: {result.sheetStatus || 'Desconocido'}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {Object.entries(result).map(([key, value]) => {
-                if(key === 'sheetStatus') return null;
+                if(key === 'sheetStatus' || key === 'error') return null;
                 return (
                   <div key={key} className="bg-white p-3 rounded border shadow-sm">
                     <p className="text-xs text-gray-500 uppercase font-semibold">{key.replace('_', ' ')}</p>
-                    <p className="font-medium text-gray-900">{String(value)}</p>
+                    <p className="font-medium text-gray-900">{typeof value === 'string' ? value : JSON.stringify(value)}</p>
                   </div>
                 )
               })}
