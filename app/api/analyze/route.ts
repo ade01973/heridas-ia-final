@@ -121,7 +121,7 @@ export async function POST(request: Request) {
           result.piel_perilesional,             // Col G
           result.objetivo_aposito,              // Col H
           result.aposito_primario,              // Col I
-          "Inteligencia Artificial",            // Col J: Fuente (CORREGIDO)
+          "Inteligencia Artificial",            // Col J: Fuente
           modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K: Modelo
           "Prompt v1.0"                         // Col L: Versión
         ];
@@ -130,6 +130,7 @@ export async function POST(request: Request) {
           spreadsheetId: process.env.GOOGLE_SHEET_ID,
           range: 'Respuestas_IA!A:L',
           valueInputOption: 'USER_ENTERED',
+          insertDataOption: 'INSERT_ROWS', // <--- ESTA ES LA CLAVE: Fuerza crear fila nueva
           requestBody: { values: [row] },
         });
         sheetStatus = 'Guardado OK';
