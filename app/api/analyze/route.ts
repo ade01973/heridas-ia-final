@@ -4,10 +4,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { google } from 'googleapis';
 
 // --- CONFIGURACIÓN DE MENÚS EXACTOS + CUIDADOS ---
-const SYSTEM_PROMPT = `
+const SYSTEM_PROMPT_BASE = `
 Actúa como enfermera experta en heridas. Analiza la imagen y devuelve un JSON.
 Debes elegir la opción que mejor encaje de las listas EXACTAS para los campos de selección.
-ADEMÁS, añade un campo "recomendaciones_cuidados" con 3 o 4 puntos clave muy breves y directos sobre cómo curar esta herida específica.
+
+IMPORTANTE:
+Se te proporcionará contexto del paciente (Edad, Diabetes, etc.). USA ESE CONTEXTO para personalizar el campo "recomendaciones_cuidados".
+Por ejemplo, si es diabético, enfócate en control glucémico y descargas. Si tiene patología vascular, adapta el vendaje, etc.
 
 Listas EXACTAS:
 - etiologia_probable: [
@@ -65,23 +68,36 @@ Responde SOLO con el JSON válido.
 
 export async function POST(request: Request) {
   try {
-    const { image, modelId, identificationCode } = await request.json();
+    // AHORA RECIBIMOS TAMBIÉN 'patientData'
+    const { image, modelId, identificationCode, patientData } = await request.json();
     
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
     if (!image) return NextResponse.json({ error: 'Falta imagen' }, { status: 400 });
 
+    // Construimos el contexto del paciente para la IA
+    const patientContext = `
+      CONTEXTO DEL PACIENTE:
+      - Edad: ${patientData?.edad || 'No especificada'}
+      - Sexo: ${patientData?.sexo || 'No especificado'}
+      - Patología Vascular: ${patientData?.vascular || 'No'}
+      - Patología Cardiaca: ${patientData?.cardiaca || 'No'}
+      - Diabético: ${patientData?.diabetico || 'No'}
+    `;
+
+    // Unimos el prompt base con el contexto del paciente
+    const FINAL_PROMPT = SYSTEM_PROMPT_BASE + "\n" + patientContext;
+
     let result = null;
 
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        // Modelo 2.5 Flash (Tu favorito)
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
-          SYSTEM_PROMPT,
+          FINAL_PROMPT,
           { inlineData: { data: cleanBase64, mimeType: "image/jpeg" } }
         ]);
         const text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
@@ -90,7 +106,7 @@ export async function POST(request: Request) {
         const response = await openai.chat.completions.create({
           model: "gpt-4o",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: FINAL_PROMPT },
             { role: "user", content: [{ type: "image_url", image_url: { url: image } }] },
           ],
           response_format: { type: "json_object" },
@@ -102,7 +118,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Error en la IA: ${aiError.message}` }, { status: 500 });
     }
 
-    // 2. GUARDAR EN SHEET (IGUAL QUE ANTES, IGNORANDO LOS CUIDADOS)
+    // 2. GUARDAR EN SHEET (IGNORAMOS DATOS PACIENTE Y CUIDADOS)
     let sheetStatus = 'No configurado';
     if (process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
@@ -115,6 +131,7 @@ export async function POST(request: Request) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         
+        // MANTENEMOS TU ESTRUCTURA ORIGINAL EXACTA
         const row = [
           new Date().toLocaleString(),          // Col A
           identificationCode,                   // Col B
