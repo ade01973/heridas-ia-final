@@ -74,8 +74,10 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        // AQUÍ ESTÁ EL MODELO: Si te funcionó "2.5", pon "2.5". Yo pongo la 2.0 oficial.
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        // --- AQUÍ LA VERSIÓN FLASH ESTABLE ---
+        // Usamos la 1.5-flash que es la oficial V1. 
+        // (La 2.0 dio error 404 porque es beta/exp).
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
@@ -128,18 +130,17 @@ export async function POST(request: Request) {
           "Prompt v1.0"
         ];
 
-        // --- AQUÍ ESTABA EL ERROR ---
-        // Cambiado 'Hoja 1' por 'Respuestas_IA'
+        // --- CORRECCIÓN CRÍTICA: NOMBRE DE LA HOJA ---
+        // Cambiado 'Hoja 1' por 'Respuestas_IA' que es como se llama tu pestaña real
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.GOOGLE_SHEET_ID,
-          range: 'Respuestas_IA!A:L',  // <--- CORREGIDO
+          range: 'Respuestas_IA!A:L',
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [row] },
         });
         sheetStatus = 'Guardado OK';
       } catch (e: any) {
         console.error("Error Sheet:", e);
-        // Si falla el nombre de la hoja, nos lo dirá claramente
         sheetStatus = `Fallo Excel: ${e.message}`; 
       }
     }
