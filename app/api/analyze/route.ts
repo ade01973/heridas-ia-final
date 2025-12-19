@@ -74,9 +74,7 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        // --- AQUÍ LA VERSIÓN FLASH ESTABLE ---
-        // Usamos la 1.5-flash que es la oficial V1. 
-        // (La 2.0 dio error 404 porque es beta/exp).
+        // MANTENEMOS TU MODELO GANADOR: 2.5-flash
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
@@ -115,23 +113,22 @@ export async function POST(request: Request) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         
+        // --- AQUÍ ESTÁ EL ORDEN CORREGIDO SEGÚN TU FILA DE PRUEBA ---
         const row = [
-          identificationCode,
-          new Date().toLocaleString(),
-          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini',
-          result.etiologia_probable,
-          result.tejido_predominante,
-          result.nivel_exudado,
-          result.piel_perilesional,
-          result.signos_infeccion,
-          result.aposito_primario,
-          result.objetivo_aposito,
-          "Inteligencia Artificial",
-          "Prompt v1.0"
+          new Date().toLocaleString(),          // Col A: Fecha (ANTES era ID)
+          identificationCode,                   // Col B: ID (ANTES era Fecha)
+          result.etiologia_probable,            // Col C
+          result.tejido_predominante,           // Col D
+          result.nivel_exudado,                 // Col E
+          result.signos_infeccion,              // Col F (Infección va antes que Piel en tu prueba)
+          result.piel_perilesional,             // Col G
+          result.objetivo_aposito,              // Col H (Objetivo va antes que Apósito)
+          result.aposito_primario,              // Col I
+          "Profesional sanitario (IA)",         // Col J: Fuente (Coincide con tu "Profesional...")
+          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K: Modelo (Al final)
+          "Prompt v1.0"                         // Col L: Versión
         ];
 
-        // --- CORRECCIÓN CRÍTICA: NOMBRE DE LA HOJA ---
-        // Cambiado 'Hoja 1' por 'Respuestas_IA' que es como se llama tu pestaña real
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.GOOGLE_SHEET_ID,
           range: 'Respuestas_IA!A:L',
