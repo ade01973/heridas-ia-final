@@ -3,11 +3,13 @@ import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { google } from 'googleapis';
 
-// --- CONFIGURACIÓN DE MENÚS EXACTOS ---
+// --- CONFIGURACIÓN DE MENÚS EXACTOS + CUIDADOS ---
 const SYSTEM_PROMPT = `
 Actúa como enfermera experta en heridas. Analiza la imagen y devuelve un JSON.
-Debes elegir la opción que mejor encaje de las siguientes listas EXACTAS:
+Debes elegir la opción que mejor encaje de las listas EXACTAS para los campos de selección.
+ADEMÁS, añade un campo "recomendaciones_cuidados" con 3 o 4 puntos clave muy breves y directos sobre cómo curar esta herida específica.
 
+Listas EXACTAS:
 - etiologia_probable: [
     "Lesión por presión (LPP)", 
     "Úlcera venosa (de extremidad inferior)", 
@@ -57,6 +59,7 @@ Debes elegir la opción que mejor encaje de las siguientes listas EXACTAS:
     "Proteger granulación / Epitelización (Mantener ambiente húmedo óptimo y evitar traumatismos)"
   ]
 
+El campo "recomendaciones_cuidados" debe ser un texto breve (string) con saltos de línea o guiones.
 Responde SOLO con el JSON válido.
 `;
 
@@ -74,6 +77,7 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
+        // Modelo 2.5 Flash (Tu favorito)
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
@@ -98,7 +102,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Error en la IA: ${aiError.message}` }, { status: 500 });
     }
 
-    // 2. GUARDAR EN SHEET
+    // 2. GUARDAR EN SHEET (IGUAL QUE ANTES, IGNORANDO LOS CUIDADOS)
     let sheetStatus = 'No configurado';
     if (process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
@@ -112,8 +116,8 @@ export async function POST(request: Request) {
         const sheets = google.sheets({ version: 'v4', auth });
         
         const row = [
-          new Date().toLocaleString(),          // Col A: Fecha
-          identificationCode,                   // Col B: ID
+          new Date().toLocaleString(),          // Col A
+          identificationCode,                   // Col B
           result.etiologia_probable,            // Col C
           result.tejido_predominante,           // Col D
           result.nivel_exudado,                 // Col E
@@ -121,16 +125,16 @@ export async function POST(request: Request) {
           result.piel_perilesional,             // Col G
           result.objetivo_aposito,              // Col H
           result.aposito_primario,              // Col I
-          "Inteligencia Artificial",            // Col J: Fuente
-          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K: Modelo
-          "Prompt v1.0"                         // Col L: Versión
+          "Inteligencia Artificial",            // Col J
+          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K
+          "Prompt v1.0"                         // Col L
         ];
 
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.GOOGLE_SHEET_ID,
           range: 'Respuestas_IA!A:L',
           valueInputOption: 'USER_ENTERED',
-          insertDataOption: 'INSERT_ROWS', // <--- ESTA ES LA CLAVE: Fuerza crear fila nueva
+          insertDataOption: 'INSERT_ROWS',
           requestBody: { values: [row] },
         });
         sheetStatus = 'Guardado OK';
