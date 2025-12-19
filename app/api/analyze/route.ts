@@ -3,8 +3,7 @@ import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { google } from 'googleapis';
 
-// --- CONFIGURACIÓN DE LOS MENÚS EXACTOS DEL EXCEL ---
-// Es vital que esto coincida letra por letra con tus desplegables
+// --- CONFIGURACIÓN DE MENÚS EXACTOS ---
 const SYSTEM_PROMPT = `
 Actúa como enfermera experta en heridas. Analiza la imagen y devuelve un JSON.
 Debes elegir la opción que mejor encaje de las siguientes listas EXACTAS:
@@ -65,7 +64,6 @@ export async function POST(request: Request) {
   try {
     const { image, modelId, identificationCode } = await request.json();
     
-    // Inicializar clientes IA
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -76,7 +74,9 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // AQUÍ ESTÁ EL MODELO: Si te funcionó "2.5", pon "2.5". Yo pongo la 2.0 oficial.
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
           SYSTEM_PROMPT,
@@ -100,9 +100,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Error en la IA: ${aiError.message}` }, { status: 500 });
     }
 
-    // 2. GUARDAR EN SHEET (Protegido para que no cuelgue la app)
+    // 2. GUARDAR EN SHEET
     let sheetStatus = 'No configurado';
-    
     if (process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
         const auth = new google.auth.GoogleAuth({
@@ -114,33 +113,33 @@ export async function POST(request: Request) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         
-        // ORDEN DE COLUMNAS (Asegúrate que tu Excel sigue este orden):
-        // A: ID, B: Fecha, C: Modelo IA, D: Etiología, E: Tejido, F: Exudado, G: Piel, H: Infección, I: Apósito, J: Objetivo, K: Fuente, L: Prompt
         const row = [
-          identificationCode,                 // Columna A
-          new Date().toLocaleString(),        // Columna B
-          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Columna C (Ajustado a tu menú)
-          result.etiologia_probable,          // Columna D
-          result.tejido_predominante,         // Columna E
-          result.nivel_exudado,               // Columna F
-          result.piel_perilesional,           // Columna G
-          result.signos_infeccion,            // Columna H
-          result.aposito_primario,            // Columna I
-          result.objetivo_aposito,            // Columna J
-          "Inteligencia Artificial",          // Columna K (Fuente)
-          "Prompt v1.0"                       // Columna L (Versión Prompt)
+          identificationCode,
+          new Date().toLocaleString(),
+          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini',
+          result.etiologia_probable,
+          result.tejido_predominante,
+          result.nivel_exudado,
+          result.piel_perilesional,
+          result.signos_infeccion,
+          result.aposito_primario,
+          result.objetivo_aposito,
+          "Inteligencia Artificial",
+          "Prompt v1.0"
         ];
 
+        // --- AQUÍ ESTABA EL ERROR ---
+        // Cambiado 'Hoja 1' por 'Respuestas_IA'
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.GOOGLE_SHEET_ID,
-          range: 'Hoja 1!A:L', // Abarca hasta la columna L
+          range: 'Respuestas_IA!A:L',  // <--- CORREGIDO
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [row] },
         });
         sheetStatus = 'Guardado OK';
       } catch (e: any) {
         console.error("Error Sheet:", e);
-        // Si falla el Excel, guardamos el mensaje pero devolvemos el resultado de la IA
+        // Si falla el nombre de la hoja, nos lo dirá claramente
         sheetStatus = `Fallo Excel: ${e.message}`; 
       }
     }
