@@ -282,8 +282,8 @@ export default function Home() {
         </div>
       </div>
       
-      <div className="text-center mt-8 text-slate-400 text-xs font-mono">
-        <p>Proyecto de Investigación Científica v1.0 • Generative AI for Wound Care</p>
+     <div className="text-center mt-8 text-slate-400 text-xs font-mono">
+        <p>Proyecto de Investigación Científica v1.0 • Generative AI for Wound Care • © Alberto González</p>
       </div>
     </main>
   );
