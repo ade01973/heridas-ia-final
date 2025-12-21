@@ -32,7 +32,7 @@ Listas EXACTAS:
     "Seco / No visible", 
     "Húmedo óptimo", 
     "Mojado / saturado", 
-    "Fuga de exudado"
+    "Macerante"
   ]
 - piel_perilesional: [
     "Sana / Intacta (Color y textura similar a la piel circundante normal)", 
