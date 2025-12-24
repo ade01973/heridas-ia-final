@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { 
+  GoogleGenerativeAI, 
+  HarmCategory, 
+  HarmBlockThreshold 
+} from '@google/generative-ai'; // <--- IMPORTANTE: Importamos las categorías de seguridad
 import { google } from 'googleapis';
 
 // --- CONFIGURACIÓN DE MENÚS EXACTOS + CUIDADOS ---
@@ -68,7 +72,6 @@ Responde SOLO con el JSON válido.
 
 export async function POST(request: Request) {
   try {
-    // AHORA RECIBIMOS TAMBIÉN 'patientData'
     const { image, modelId, identificationCode, patientData } = await request.json();
     
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
@@ -76,7 +79,6 @@ export async function POST(request: Request) {
 
     if (!image) return NextResponse.json({ error: 'Falta imagen' }, { status: 400 });
 
-    // Construimos el contexto del paciente para la IA
     const patientContext = `
       CONTEXTO DEL PACIENTE:
       - Edad: ${patientData?.edad || 'No especificada'}
@@ -86,7 +88,6 @@ export async function POST(request: Request) {
       - Diabético: ${patientData?.diabetico || 'No'}
     `;
 
-    // Unimos el prompt base con el contexto del paciente
     const FINAL_PROMPT = SYSTEM_PROMPT_BASE + "\n" + patientContext;
 
     let result = null;
@@ -94,14 +95,42 @@ export async function POST(request: Request) {
     // 1. ANÁLISIS IA
     try {
       if (modelId === 'gemini') {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // --- CONFIGURACIÓN DE SEGURIDAD AÑADIDA ---
+        // Esto desactiva los filtros para permitir ver heridas
+        const safetySettings = [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_NONE,
+          },
+        ];
+
+        // Usamos gemini-1.5-flash o gemini-1.5-pro (2.5 aun no es estable publicamente)
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash", 
+            safetySettings: safetySettings // <--- Aquí aplicamos los filtros
+        });
+
         const cleanBase64 = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await model.generateContent([
           FINAL_PROMPT,
           { inlineData: { data: cleanBase64, mimeType: "image/jpeg" } }
         ]);
+        
         const text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         result = JSON.parse(text);
+
       } else {
         const response = await openai.chat.completions.create({
           model: "gpt-4o",
@@ -115,10 +144,14 @@ export async function POST(request: Request) {
       }
     } catch (aiError: any) {
       console.error("Error IA:", aiError);
+      // Mensaje más claro si bloquea
+      if (aiError.message && aiError.message.includes("SAFETY")) {
+         return NextResponse.json({ error: `La IA bloqueó la imagen por seguridad. Intenta recortar el fondo.` }, { status: 500 });
+      }
       return NextResponse.json({ error: `Error en la IA: ${aiError.message}` }, { status: 500 });
     }
 
-    // 2. GUARDAR EN SHEET (IGNORAMOS DATOS PACIENTE Y CUIDADOS)
+    // 2. GUARDAR EN SHEET
     let sheetStatus = 'No configurado';
     if (process.env.GOOGLE_SHEET_ID && process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
       try {
@@ -131,20 +164,19 @@ export async function POST(request: Request) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
         
-        // MANTENEMOS TU ESTRUCTURA ORIGINAL EXACTA
         const row = [
-          new Date().toLocaleString(),          // Col A
-          identificationCode,                   // Col B
-          result.etiologia_probable,            // Col C
-          result.tejido_predominante,           // Col D
-          result.nivel_exudado,                 // Col E
-          result.signos_infeccion,              // Col F
-          result.piel_perilesional,             // Col G
-          result.objetivo_aposito,              // Col H
-          result.aposito_primario,              // Col I
-          "Inteligencia Artificial",            // Col J
-          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', // Col K
-          "Prompt v1.0"                         // Col L
+          new Date().toLocaleString(),          
+          identificationCode,                   
+          result.etiologia_probable,            
+          result.tejido_predominante,           
+          result.nivel_exudado,                 
+          result.signos_infeccion,              
+          result.piel_perilesional,             
+          result.objetivo_aposito,              
+          result.aposito_primario,              
+          "Inteligencia Artificial",            
+          modelId === 'chatgpt' ? 'ChatGPT' : 'Gemini', 
+          "Prompt v1.0"                         
         ];
 
         await sheets.spreadsheets.values.append({
