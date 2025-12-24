@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
         // Usamos gemini-1.5-flash (el 2.5 no existe públicamente y da error)
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash", 
+            model: "gemini-2.5-flash", 
             safetySettings: safetySettings 
         });
         
